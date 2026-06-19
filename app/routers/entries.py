@@ -22,3 +22,15 @@ def delete_entry(entry_id: int, db: Session = Depends(get_db)):
     if not crud.delete_entry(db, entry_id):
         raise HTTPException(status_code=404, detail="Entry not found")
     return {"deleted": True}
+
+
+@router.put("/entries/{entry_id}", response_model=schemas.AccountEntryOut)
+def update_entry(entry_id: int, data: schemas.IndividualEntryCreate, db: Session = Depends(get_db)):
+    try:
+        return crud.update_entry(db, entry_id, data)
+    except FileExistsError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

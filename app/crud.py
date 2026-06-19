@@ -259,6 +259,50 @@ def delete_entry(db: Session, entry_id: int) -> bool:
     return True
 
 
+def update_entry(db: Session, entry_id: int, data: schemas.IndividualEntryCreate) -> models.AccountEntry:
+    entry = db.get(models.AccountEntry, entry_id)
+    if not entry:
+        raise LookupError("Entry not found")
+    account = db.get(models.Account, entry.account_id)
+    if not account:
+        raise LookupError("Account not found")
+
+    # Check for duplicate date for same account
+    duplicate = db.scalar(
+        select(models.AccountEntry.id).where(
+            models.AccountEntry.account_id == entry.account_id,
+            models.AccountEntry.date_of_entry == data.date_of_entry,
+            models.AccountEntry.id != entry_id,
+        )
+    )
+    if duplicate:
+        raise FileExistsError("An entry already exists for this date")
+
+    # Validate metric entries belong to this account
+    _validate_metric_entries(db, account.id, data.metric_entries)
+
+    try:
+        entry.date_of_entry = data.date_of_entry
+        entry.current_value = data.current_value
+        # remove existing metric entries
+        db.execute(delete(models.MetricEntry).where(models.MetricEntry.account_entry_id == entry_id))
+        db.flush()
+        # add provided metric entries
+        db.add_all([
+            models.MetricEntry(account_entry_id=entry.id, metric_id=item.metric_id, value=item.value)
+            for item in data.metric_entries
+        ])
+        db.commit()
+        db.refresh(entry)
+        return entry
+    except IntegrityError as exc:
+        db.rollback()
+        raise FileExistsError("An entry already exists for this date") from exc
+    except Exception:
+        db.rollback()
+        raise
+
+
 def get_account_chart_data(
     db: Session, account_id: int, range_days: int | None
 ) -> schemas.AccountChartData | None:
