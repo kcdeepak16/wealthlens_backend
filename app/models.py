@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Date, ForeignKey, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, Date, ForeignKey, Integer, JSON, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -57,3 +57,21 @@ class MetricEntry(Base):
 
     account_entry = relationship("AccountEntry", back_populates="metric_entries")
     metric = relationship("Metric", back_populates="entries")
+
+
+class AccountTypeProfit(Base):
+    __tablename__ = "account_type_profit"
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_type = Column(String, nullable=False)
+    date_of_entry = Column(Date, nullable=False)
+    profit_percentage = Column(Numeric(8, 4), nullable=False)
+
+    __table_args__ = (UniqueConstraint("account_type", "date_of_entry", name="uq_type_date"),)
+
+
+class ForecastSettings(Base):
+    __tablename__ = "forecast_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    config = Column(JSON, nullable=False)

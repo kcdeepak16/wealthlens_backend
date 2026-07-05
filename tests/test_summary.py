@@ -64,7 +64,7 @@ def test_summary_history_chart_and_metrics(client):
     assert [point["value"] for point in chart["metric_series"][0]["data"]] == [8, 9]
 
 
-def test_clear_all_data(client):
+def test_clear_all_data_endpoint_is_removed(client):
     create_account(client, "Bank")
-    assert client.delete("/api/v1/data/all").status_code == 200
-    assert client.get("/api/v1/accounts").json() == []
+    assert client.delete("/api/v1/data/all").status_code == 404
+    assert len(client.get("/api/v1/accounts").json()) == 1

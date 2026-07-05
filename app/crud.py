@@ -197,6 +197,21 @@ def create_snapshot(db: Session, data: schemas.SnapshotCreate) -> list[models.Ac
             )
             for item in data.accounts
         ]
+        for profit in data.account_type_profits:
+            existing = db.scalar(
+                select(models.AccountTypeProfit.id).where(
+                    models.AccountTypeProfit.account_type == profit.account_type,
+                    models.AccountTypeProfit.date_of_entry == data.date_of_entry,
+                )
+            )
+            if not existing:
+                db.add(
+                    models.AccountTypeProfit(
+                        account_type=profit.account_type,
+                        date_of_entry=data.date_of_entry,
+                        profit_percentage=profit.profit_percentage,
+                    )
+                )
         db.commit()
         for entry in entries:
             db.refresh(entry)
@@ -237,6 +252,69 @@ def create_individual_entry(
     except Exception:
         db.rollback()
         raise
+
+
+def get_snapshot_prefill(db: Session) -> dict:
+    accounts = list(
+        db.scalars(
+            select(models.Account)
+            .options(selectinload(models.Account.metrics))
+            .where(models.Account.consider_for_networth.is_(True))
+            .order_by(models.Account.name)
+        ).all()
+    )
+
+    account_prefills = []
+    for account in accounts:
+        latest_entry = db.scalar(
+            select(models.AccountEntry)
+            .where(models.AccountEntry.account_id == account.id)
+            .order_by(models.AccountEntry.date_of_entry.desc(), models.AccountEntry.id.desc())
+            .limit(1)
+        )
+        metric_prefills = []
+        for metric in account.metrics:
+            last_metric_entry = db.scalar(
+                select(models.MetricEntry)
+                .join(models.AccountEntry)
+                .where(
+                    models.AccountEntry.account_id == account.id,
+                    models.MetricEntry.metric_id == metric.id,
+                )
+                .order_by(models.AccountEntry.date_of_entry.desc(), models.AccountEntry.id.desc())
+                .limit(1)
+            )
+            metric_prefills.append(
+                {
+                    "metric_id": metric.id,
+                    "last_value": last_metric_entry.value if last_metric_entry else None,
+                }
+            )
+        account_prefills.append(
+            {
+                "account_id": account.id,
+                "last_current_value": latest_entry.current_value if latest_entry else None,
+                "metrics": metric_prefills,
+            }
+        )
+
+    distinct_types = list(db.scalars(select(models.Account.type).distinct()).all())
+    type_profit_prefills = []
+    for account_type in distinct_types:
+        latest_profit = db.scalar(
+            select(models.AccountTypeProfit)
+            .where(models.AccountTypeProfit.account_type == account_type)
+            .order_by(models.AccountTypeProfit.date_of_entry.desc(), models.AccountTypeProfit.id.desc())
+            .limit(1)
+        )
+        type_profit_prefills.append(
+            {
+                "account_type": account_type,
+                "last_profit_percentage": latest_profit.profit_percentage if latest_profit else None,
+            }
+        )
+
+    return {"accounts": account_prefills, "account_type_profits": type_profit_prefills}
 
 
 def get_entries_for_account(db: Session, account_id: int) -> list[models.AccountEntry]:
@@ -456,10 +534,3 @@ def get_summary(db: Session) -> schemas.SummaryResponse:
         excluded_accounts=excluded,
     )
 
-
-def clear_all_data(db: Session) -> None:
-    db.execute(delete(models.MetricEntry))
-    db.execute(delete(models.AccountEntry))
-    db.execute(delete(models.Metric))
-    db.execute(delete(models.Account))
-    db.commit()

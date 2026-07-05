@@ -7,6 +7,11 @@ from ..database import get_db
 router = APIRouter(tags=["entries"])
 
 
+@router.get("/snapshots/prefill", response_model=schemas.SnapshotPrefillResponse)
+def get_snapshot_prefill_endpoint(db: Session = Depends(get_db)):
+    return crud.get_snapshot_prefill(db)
+
+
 @router.post("/snapshots", response_model=list[schemas.AccountEntryOut], status_code=status.HTTP_201_CREATED)
 def create_snapshot(data: schemas.SnapshotCreate, db: Session = Depends(get_db)):
     try:
