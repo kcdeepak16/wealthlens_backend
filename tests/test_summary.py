@@ -64,6 +64,24 @@ def test_summary_history_chart_and_metrics(client):
     assert [point["value"] for point in chart["metric_series"][0]["data"]] == [8, 9]
 
 
+def test_new_account_without_entries_does_not_zero_dashboard(client):
+    bank = create_account(client, "Bank")
+    assert client.post(
+        "/api/v1/snapshots",
+        json={
+            "date_of_entry": "2026-01-01",
+            "accounts": [{"account_id": bank["id"], "current_value": 1000, "metric_entries": []}],
+        },
+    ).status_code == 201
+
+    create_account(client, "New Empty Account")
+
+    summary = client.get("/api/v1/summary").json()
+    history = client.get("/api/v1/networth/history?range=all").json()
+    assert summary["current_net_worth"] == 1000
+    assert history[-1]["net_worth"] == 1000
+
+
 def test_clear_all_data_endpoint_is_removed(client):
     create_account(client, "Bank")
     assert client.delete("/api/v1/data/all").status_code == 404

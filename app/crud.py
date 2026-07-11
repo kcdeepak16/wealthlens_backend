@@ -1,12 +1,91 @@
 from collections import defaultdict
 from datetime import date, timedelta
 from decimal import Decimal
+import re
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from . import models, schemas
+
+
+def _label_for_type(value: str) -> str:
+    return value.replace("_", " ").replace("-", " ").title()
+
+
+def _slugify_account_type(label: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")
+    return slug or "account_type"
+
+
+def ensure_account_types(db: Session) -> None:
+    existing = set(db.scalars(select(models.AccountType.value)).all())
+    changed = False
+    if not existing:
+        for value, label in schemas.DEFAULT_ACCOUNT_TYPES:
+            db.add(models.AccountType(value=value, label=label))
+        existing = {value for value, _ in schemas.DEFAULT_ACCOUNT_TYPES}
+        changed = True
+
+    account_types = set(db.scalars(select(models.Account.type).distinct()).all())
+    for account_type in account_types - existing:
+        db.add(models.AccountType(value=account_type, label=_label_for_type(account_type)))
+        changed = True
+
+    if changed:
+        db.commit()
+
+
+def get_account_types(db: Session) -> list[models.AccountType]:
+    ensure_account_types(db)
+    return list(db.scalars(select(models.AccountType).order_by(models.AccountType.label)).all())
+
+
+def _account_type_exists(db: Session, value: str) -> bool:
+    ensure_account_types(db)
+    return db.get(models.AccountType, value) is not None
+
+
+def create_account_type(db: Session, data: schemas.AccountTypeCreate) -> models.AccountType:
+    ensure_account_types(db)
+    base = _slugify_account_type(data.label)
+    value = base
+    index = 2
+    while db.get(models.AccountType, value) is not None:
+        value = f"{base}_{index}"
+        index += 1
+    account_type = models.AccountType(value=value, label=data.label)
+    db.add(account_type)
+    db.commit()
+    db.refresh(account_type)
+    return account_type
+
+
+def update_account_type(
+    db: Session, value: str, data: schemas.AccountTypeUpdate
+) -> models.AccountType | None:
+    ensure_account_types(db)
+    account_type = db.get(models.AccountType, value)
+    if not account_type:
+        return None
+    account_type.label = data.label
+    db.commit()
+    db.refresh(account_type)
+    return account_type
+
+
+def delete_account_type(db: Session, value: str) -> bool:
+    ensure_account_types(db)
+    account_type = db.get(models.AccountType, value)
+    if not account_type:
+        return False
+    in_use = db.scalar(select(models.Account.id).where(models.Account.type == value).limit(1))
+    if in_use:
+        raise ValueError("Account type is used by one or more accounts")
+    db.delete(account_type)
+    db.commit()
+    return True
 
 
 def range_to_days(range_str: str) -> int | None:
@@ -64,6 +143,8 @@ def get_account(db: Session, account_id: int) -> schemas.AccountWithStats | None
 
 
 def create_account(db: Session, data: schemas.AccountCreate) -> models.Account:
+    if not _account_type_exists(db, data.type):
+        raise ValueError("Account type does not exist")
     account = models.Account(**data.model_dump())
     db.add(account)
     db.commit()
@@ -78,6 +159,8 @@ def update_account(
     if not account:
         return None
     for key, value in data.model_dump(exclude_unset=True).items():
+        if key == "type" and not _account_type_exists(db, value):
+            raise ValueError("Account type does not exist")
         setattr(account, key, value.strip() if key == "name" and value else value)
     db.commit()
     db.refresh(account)
@@ -435,11 +518,9 @@ def get_networth_history(db: Session, range_days: int | None) -> list[schemas.Ne
         select(
             models.AccountEntry.date_of_entry,
             func.sum(models.AccountEntry.current_value),
-            func.count(func.distinct(models.AccountEntry.account_id)),
         )
         .where(models.AccountEntry.account_id.in_(account_ids))
         .group_by(models.AccountEntry.date_of_entry)
-        .having(func.count(func.distinct(models.AccountEntry.account_id)) == len(account_ids))
         .order_by(models.AccountEntry.date_of_entry)
     ).all()
     if range_days is not None:
@@ -533,4 +614,3 @@ def get_summary(db: Session) -> schemas.SummaryResponse:
         summary_metrics=metrics,
         excluded_accounts=excluded,
     )
-

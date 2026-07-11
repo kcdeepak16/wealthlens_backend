@@ -56,6 +56,7 @@ def get_forecast_config(db: Session = Depends(get_db)):
                 default_rate_percent=float(latest_profit.profit_percentage)
                 if latest_profit
                 else 0.0,
+                has_profit_history=latest_profit is not None,
             )
         )
 

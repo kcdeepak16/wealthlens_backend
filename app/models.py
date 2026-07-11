@@ -17,6 +17,13 @@ class Account(Base):
     entries = relationship("AccountEntry", back_populates="account", cascade="all, delete-orphan")
 
 
+class AccountType(Base):
+    __tablename__ = "account_types"
+
+    value = Column(String, primary_key=True, index=True)
+    label = Column(String, nullable=False)
+
+
 class Metric(Base):
     __tablename__ = "metrics"
 

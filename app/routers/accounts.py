@@ -14,9 +14,40 @@ def list_accounts(
     return crud.get_accounts(db, include_excluded)
 
 
+@router.get("/account-types", response_model=list[schemas.AccountTypeOut])
+def list_account_types(db: Session = Depends(get_db)):
+    return crud.get_account_types(db)
+
+
+@router.post("/account-types", response_model=schemas.AccountTypeOut, status_code=status.HTTP_201_CREATED)
+def create_account_type(data: schemas.AccountTypeCreate, db: Session = Depends(get_db)):
+    return crud.create_account_type(db, data)
+
+
+@router.put("/account-types/{value}", response_model=schemas.AccountTypeOut)
+def update_account_type(value: str, data: schemas.AccountTypeUpdate, db: Session = Depends(get_db)):
+    account_type = crud.update_account_type(db, value, data)
+    if not account_type:
+        raise HTTPException(status_code=404, detail="Account type not found")
+    return account_type
+
+
+@router.delete("/account-types/{value}")
+def delete_account_type(value: str, db: Session = Depends(get_db)):
+    try:
+        if not crud.delete_account_type(db, value):
+            raise HTTPException(status_code=404, detail="Account type not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"deleted": True}
+
+
 @router.post("/accounts", response_model=schemas.AccountOut, status_code=status.HTTP_201_CREATED)
 def create_account(data: schemas.AccountCreate, db: Session = Depends(get_db)):
-    return crud.create_account(db, data)
+    try:
+        return crud.create_account(db, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/accounts/{account_id}", response_model=schemas.AccountWithStats)
@@ -29,10 +60,13 @@ def get_account(account_id: int, db: Session = Depends(get_db)):
 
 @router.put("/accounts/{account_id}", response_model=schemas.AccountOut)
 def update_account(account_id: int, data: schemas.AccountUpdate, db: Session = Depends(get_db)):
-    account = crud.update_account(db, account_id, data)
-    if not account:
-        raise HTTPException(status_code=404, detail="Account not found")
-    return account
+    try:
+        account = crud.update_account(db, account_id, data)
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+        return account
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.delete("/accounts/{account_id}")

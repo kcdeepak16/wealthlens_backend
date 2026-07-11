@@ -4,7 +4,15 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
-VALID_ACCOUNT_TYPES = ["bank_account", "mutual_fund", "stocks", "pf", "lent", "Liquid Funds", "other"]
+DEFAULT_ACCOUNT_TYPES = [
+    ("bank_account", "Bank Account"),
+    ("mutual_fund", "Mutual Fund"),
+    ("stocks", "Stocks"),
+    ("pf", "PF"),
+    ("lent", "Lent"),
+    ("liquid_funds", "Liquid Funds"),
+    ("other", "Other"),
+]
 
 
 class MetricBase(BaseModel):
@@ -52,8 +60,9 @@ class AccountBase(BaseModel):
     @field_validator("type")
     @classmethod
     def validate_type(cls, value: str) -> str:
-        if value not in VALID_ACCOUNT_TYPES:
-            raise ValueError(f"Type must be one of: {', '.join(VALID_ACCOUNT_TYPES)}")
+        value = value.strip()
+        if not value:
+            raise ValueError("Type is required")
         return value
 
 
@@ -70,8 +79,11 @@ class AccountUpdate(BaseModel):
     @field_validator("type")
     @classmethod
     def validate_type(cls, value: Optional[str]) -> Optional[str]:
-        if value is not None and value not in VALID_ACCOUNT_TYPES:
-            raise ValueError(f"Type must be one of: {', '.join(VALID_ACCOUNT_TYPES)}")
+        if value is None:
+            return value
+        value = value.strip()
+        if not value:
+            raise ValueError("Type is required")
         return value
 
 
@@ -79,6 +91,36 @@ class AccountOut(AccountBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     metrics: list[MetricOut] = []
+
+
+class AccountTypeCreate(BaseModel):
+    label: str
+
+    @field_validator("label")
+    @classmethod
+    def validate_label(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Label is required")
+        return value
+
+
+class AccountTypeUpdate(BaseModel):
+    label: str
+
+    @field_validator("label")
+    @classmethod
+    def validate_label(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Label is required")
+        return value
+
+
+class AccountTypeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    value: str
+    label: str
 
 
 class AccountWithStats(AccountOut):
@@ -242,6 +284,7 @@ class ForecastAccountTypeConfig(BaseModel):
     account_type: str
     current_value: float
     default_rate_percent: float
+    has_profit_history: bool = False
 
 
 class ForecastConfigResponse(BaseModel):
