@@ -1,4 +1,6 @@
-from sqlalchemy import Boolean, Column, Date, ForeignKey, Integer, JSON, Numeric, String, UniqueConstraint
+from datetime import datetime, timezone
+
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -82,3 +84,26 @@ class ForecastSettings(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     config = Column(JSON, nullable=False)
+
+
+class SavedView(Base):
+    __tablename__ = "saved_views"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False)
+    prompt = Column(Text, nullable=False)
+    sql_query = Column(Text, nullable=False)
+    template = Column(String, nullable=False)
+    config = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)
+    last_run_at = Column(DateTime, nullable=True)
+
+
+class SavedViewChat(Base):
+    __tablename__ = "saved_view_chats"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(100), nullable=False)
+    messages = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), nullable=False)

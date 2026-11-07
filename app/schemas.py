@@ -1,6 +1,6 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
@@ -340,3 +340,108 @@ class FirePlanResponse(BaseModel):
     rows: list[FireYearRow]
     depleted_at_year: int | None
     sustainable: bool
+
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=16000)
+
+
+class ViewGenerateRequest(BaseModel):
+    messages: list[ChatMessage] = Field(min_length=1, max_length=100)
+
+
+class ViewConfirmRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=100)
+    prompt: str = Field(min_length=1, max_length=8000)
+    sql_query: str = Field(min_length=1, max_length=12000)
+    template: str
+    config: dict[str, Any]
+
+
+class SavedViewOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    title: str
+    prompt: str
+    sql_query: str
+    template: str
+    config: dict[str, Any]
+    created_at: datetime
+    last_run_at: datetime | None
+
+
+class ViewRunResult(BaseModel):
+    view_id: int | None
+    title: str
+    template: str
+    config: dict[str, Any]
+    data: list[dict[str, Any]]
+    row_count: int
+
+
+class ViewGenerateResponse(BaseModel):
+    type: Literal["question", "preview", "failure"]
+    message: str
+    sql_query: str | None = None
+    template: str | None = None
+    config: dict[str, Any] | None = None
+    data: list[dict[str, Any]] | None = None
+    row_count: int | None = None
+    title: str | None = None
+
+
+class ViewUpdateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=100)
+
+
+class SavedChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=8000)
+    context_content: str | None = Field(default=None, max_length=16000)
+    preview: ViewGenerateResponse | None = None
+    is_error: bool = False
+
+
+def _validate_saved_chat_size(messages: list[SavedChatMessage]) -> list[SavedChatMessage]:
+    serialized_size = sum(len(message.model_dump_json()) for message in messages)
+    if serialized_size > 2_000_000:
+        raise ValueError("Saved chat content cannot exceed 2 MB.")
+    return messages
+
+
+class SavedViewChatCreate(BaseModel):
+    title: str | None = Field(default=None, max_length=100)
+    messages: list[SavedChatMessage] = Field(min_length=1, max_length=100)
+
+    @field_validator("messages")
+    @classmethod
+    def validate_messages_size(cls, messages: list[SavedChatMessage]) -> list[SavedChatMessage]:
+        return _validate_saved_chat_size(messages)
+
+
+class SavedViewChatUpdate(BaseModel):
+    title: str | None = Field(default=None, max_length=100)
+    messages: list[SavedChatMessage] = Field(min_length=1, max_length=100)
+
+    @field_validator("messages")
+    @classmethod
+    def validate_messages_size(cls, messages: list[SavedChatMessage]) -> list[SavedChatMessage]:
+        return _validate_saved_chat_size(messages)
+
+
+class SavedViewChatSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    title: str
+    created_at: datetime
+    updated_at: datetime
+    message_count: int
+
+
+class SavedViewChatOut(BaseModel):
+    id: int
+    title: str
+    messages: list[SavedChatMessage]
+    created_at: datetime
+    updated_at: datetime

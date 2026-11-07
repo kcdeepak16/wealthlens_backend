@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session, sessionmaker
 class Settings(BaseSettings):
     database_url: str = "sqlite:///./wealthlens.db"
     cors_origins: str = "http://localhost:5173,http://localhost:4173,http://127.0.0.1:5173,http://127.0.0.1:4173"
+    gemini_api_key: str = ""
+    gemini_models: str = "gemini-2.5-flash-lite,gemini-2.5-flash,gemini-2.5-pro"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
